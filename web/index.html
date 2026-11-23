@@ -1,0 +1,42 @@
+<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>SentinelPack</title>
+<style>:root{--bg:#0d1117;--c:#161b22;--t:#e6edf3;--m:#8b949e;--a:#58a6ff;--g:#3fb950;--r:#f85149;--y:#d29922}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:14px system-ui}header{padding:14px 20px;border-bottom:1px solid #30363d;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+h1{margin:0;font-size:20px}small,.m{color:var(--m)}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;padding:16px}
+.card{background:var(--c);border:1px solid #30363d;border-radius:8px;padding:14px}h2{margin:0 0 10px;font-size:14px;color:var(--a)}
+button{background:#238636;color:#fff;border:0;border-radius:6px;padding:7px 12px;margin:3px 3px 3px 0;cursor:pointer}button.s{background:#30363d}button:disabled{opacity:.4}
+.ev{display:flex;gap:8px;padding:4px 0;border-bottom:1px solid #21262d}.ev b{width:46px;color:var(--m)}.tag{padding:1px 7px;border-radius:10px;font-size:11px}
+.al{border-left:3px solid var(--r);padding-left:6px}.mal{border-left:3px solid var(--g);padding-left:6px}pre{white-space:pre-wrap;font-size:12px;margin:0;max-height:300px;overflow:auto}
+.big{font-size:22px;font-weight:700}.ok{color:var(--g)}.bad{color:var(--r)}td,th{padding:3px 8px;text-align:left;font-size:12px}</style></head><body>
+<header><h1>🛡 SentinelPack</h1><small>Every incident makes the next attack harder.</small><span id=mode class=m style="margin-left:auto"></span></header>
+<main>
+<div class=card><h2>1 · Run the demo</h2>
+<button id=b1 onclick=w1()>Wave 1 — unseen attack (session A)</button><br>
+<button id=b2 onclick=conf() disabled>Investigator confirms → Learning Curator</button><br>
+<button id=b3 onclick=appr() disabled>Approve → memory_promote (collective)</button><br>
+<button id=b4 onclick=w2() disabled>Wave 2 — NEW worker session, mutated attack</button><br>
+<button class=s onclick=bench()>Run benchmark</button> <button class=s onclick=rst()>Reset</button>
+<p class=m id=msg>Start with Wave 1. It runs with an empty collective memory.</p></div>
+<div class=card><h2>2 · Case timeline & detection</h2><div id=case class=m>No case yet.</div></div>
+<div class=card><h2>3 · Learning candidate (what would be shared)</h2><pre id=cand class=m>Nothing yet. Candidates contain behaviour only — no account, device, IP or payee IDs.</pre></div>
+<div class=card><h2>4 · Learned context that contributed</h2><div id=used class=m>—</div></div>
+<div class=card><h2>5 · Benchmark</h2><div id=bench class=m>—</div></div>
+<div class=card><h2>6 · Decision trace (Meko calls, tokens, latency)</h2><div id=tr class=m style="max-height:300px;overflow:auto">—</div></div>
+<div class=card style="grid-column:1/-1"><h2>7 · Audit dossier</h2><button class=s onclick=audit()>Load dossier for current case</button><pre id=aud class=m></pre></div>
+</main><script>
+let S={a:'sess_A',case:null,lrn:null};const $=i=>document.getElementById(i),P=(u)=>fetch(u,{method:'POST'}).then(r=>r.json());
+const say=t=>$('msg').textContent=t;
+function draw(c){S.case=c;const r=c.result,ev=c.events;$('case').innerHTML=`<div class=m>${c.id} · session ${c.session} · ${c.links.accounts[0]} · ${c.links.devices[0]} · ${c.links.ips[0]}</div>`+
+ev.map((e,i)=>`<div class="ev ${i==r.stateless_alert_step?'al':''} ${i==r.memory_alert_step?'mal':''}"><b>${new Date(e.ts*1000).toISOString().substr(11,5)}</b><span>${e.channel}</span><span>${e.type}</span>
+<span class=m>${i==r.memory_alert_step?'← memory-augmented alert':''} ${i==r.stateless_alert_step?'← stateless alert':''}</span></div>`).join('')+
+`<p class=big>${r.disposition}</p><div>${r.action}</div><p class=m>Stateless alert @step ${r.stateless_alert_step+1} · memory alert @step ${r.memory_alert_step==null?'—':r.memory_alert_step+1}${r.steps_earlier!=null?` · <b class=ok>${r.steps_earlier} steps earlier</b>`:''}${r.money_prevented&&r.memory_alert_step!=null?' · <b class=ok>caught before money moved</b>':''}</p>`;
+$('used').innerHTML=r.retrieved.length?`<b class=ok>Meko returned ${r.retrieved.length} collective pattern(s)</b><pre>${JSON.stringify(r.retrieved,null,1)}</pre><div>Behavioural match: ${JSON.stringify(r.learned_contribution)}</div><div class=m>Context ${r.context_tokens} tokens vs ${r.full_log_tokens} for the raw log. Mode: ${r.meko_mode}</div>`:'Cold start — no collective memory retrieved.';tr()}
+async function w1(){let c=await P('/api/wave/1/run?session='+S.a);draw(c);b1.disabled=1;b2.disabled=0;say('Wave 1 detected late (stateless). Investigator: confirm the pattern.')}
+async function conf(){let l=await P('/api/cases/'+S.case.id+'/confirm');S.lrn=l;$('cand').textContent=JSON.stringify(l.candidate,null,1)+'\nstatus: '+l.status;b2.disabled=1;b3.disabled=0;say('Review exactly what will be shared, then approve.');tr()}
+async function appr(){let r=await P('/api/learning/'+S.lrn.id+'?reviewer=investigator'.replace('?','/approve?'));$('cand').textContent+='\n→ '+JSON.stringify(r);b3.disabled=1;b4.disabled=0;say('Promoted to collective memory. Now start a brand-new agent session.');tr()}
+async function w2(){let s=(await P('/api/session')).session;let c=await P('/api/wave/2/run?seed=3&session='+s);draw(c);say('Session '+s+' never saw Wave 1 — it learned from Meko.')}
+async function bench(){let b=await P('/api/benchmark?n=40');$('bench').innerHTML='<table>'+Object.entries(b).map(([k,v])=>`<tr><th>${k}</th><td>${v}</td></tr>`).join('')+'</table>'}
+async function audit(){if(S.case)$('aud').textContent=await fetch('/api/cases/'+S.case.id+'/audit').then(r=>r.text())}
+async function tr(){let t=await fetch('/api/traces').then(r=>r.json());$('tr').innerHTML='<table>'+t.slice(0,25).map(x=>`<tr><td>${x.agent}</td><td>${x.tool}</td><td>${x.mode}</td><td>${x.tokens}t</td><td>${x.summary}</td></tr>`).join('')+'</table>'}
+async function rst(){await P('/api/reset');location.reload()}
+fetch('/api/status').then(r=>r.json()).then(s=>$('mode').textContent='Meko: '+s.meko_mode)
+</script></body></html>
